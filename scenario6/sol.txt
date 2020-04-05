@@ -1,0 +1,55 @@
+Problem Scenario 6 [Data Analysis]
+PLEASE READ THE INTRODUCTION TO THIS SERIES. CLICK ON HOME LINK AND READ THE INTRO BEFORE ATTEMPTING TO SOLVE THE PROBLEMS
+
+Video walkthrough of this problem is available at [CLICK HERE] AND
+
+Click here for the video version of this series. This takes you to the youtube playlist of videos. 
+
+This problem helps you strengthen and validate skills related to data analysis objective of the certification exam.
+
+Data model in mysql on cloudera VM looks like this. [Note: only primary and foreign keys are included in the relational schema diagram shown below]
+
+
+
+
+Problem 6: Provide two solutions for steps 2 to 7
+Using HIVE QL over Hive Context
+Using Spark SQL over Spark SQL Context or by using RDDs
+create a hive meta store database named problem6 and import all tables from mysql retail_db database into hive meta store. 
+On spark shell use data available on meta store as source and perform step 3,4,5 and 6. [this proves your ability to use meta store as a source]  
+Rank products within department by price and order by department ascending and rank descending [this proves you can produce ranked and sorted data on joined data sets]
+find top 10 customers with most unique product purchases. if more than one customer has the same number of product purchases then the customer with the lowest customer_id will take precedence [this proves you can produce aggregate statistics on joined datasets]
+On dataset from step 3, apply filter such that only products less than 100 are extracted [this proves you can use subqueries and also filter data]
+On dataset from step 4, extract details of products purchased by top 10 customers which are priced at less than 100 USD per unit [this proves you can use subqueries and also filter data]
+Store the result of 5 and 6 in new meta store tables within hive. [this proves your ability to use metastore as a sink]
+Solution: 
+Try your best to solve the above scenario without going through the solution below. If you could then use the solution to compare your result. If you could not then I strongly recommend that you go through the concepts again (this time in more depth). Each step below provides a solution to the points mentioned in the Problem Scenario. Please go through the video for an indepth explanation of the solution.
+
+NOTE: The same solution can be implemented using Spark SQL Context. Just replace Hive Context object with SQL Context object below. Rest of the solution remains the same. i.e same concept of querying, using temp table and storing the result back to hive. 
+
+Step 1: 
+sqoop import-all-tables --connect "jdbc:mysql://quickstart.cloudera:3306/retail_db" --username retail_dba --password cloudera --warehouse-dir /user/hive/warehouse/problem6.db --hive-import --hive-database problem6 --create-hive-table --as-textfile;
+
+Step 2: 
+var hc = new org.apache.spark.sql.hive.HiveContext(sc);
+Step 3: 
+var hiveResult = hc.sql("select   d.department_id,   p.product_id,   p.product_name,  p.product_price,  rank() over (partition by d.department_id order by p.product_price) as product_price_rank,   dense_rank() over (partition by d.department_id order by p.product_price) as product_dense_price_rank   from products p   inner join categories c on c.category_id = p.product_category_id  inner join departments d on c.category_department_id = d.department_id  order by d.department_id, product_price_rank desc, product_dense_price_rank ");
+
+Step 4: 
+var hiveResult2 = hc.sql("select c.customer_id, c.customer_fname, count(distinct(oi.order_item_product_id)) unique_products  from customers c   inner join orders o on o.order_customer_id = c.customer_id  inner join order_items oi on o.order_id = oi.order_item_order_id  group by c.customer_id, c.customer_fname  order by unique_products desc, c.customer_id   limit 10
+")
+
+Step 5: 
+hiveResult.registerTempTable("product_rank_result_temp");
+hc.sql("select * from product_rank_result_temp where product_price < 100").show();
+Step 6: 
+ var topCustomers = hc.sql("select c.customer_id, c.customer_fname, count(distinct(oi.order_item_product_id)) unique_products  from customers c   inner join orders o on o.order_customer_id = c.customer_id  inner join order_items oi on o.order_id = oi.order_item_order_id  group by c.customer_id, c.customer_fname  order by unique_products desc, c.customer_id   limit 10  ");
+
+topCustomers.registerTempTable("top_cust");
+
+var topProducts = hc.sql("select distinct p.* from products p inner join order_items oi on oi.order_item_product_id = p.product_id inner join orders o on o.order_id = oi.order_item_order_id inner join top_cust tc on o.order_customer_id = tc.customer_id where p.product_price < 100");
+Step 7: 
+hc.sql("create table problem6.product_rank_result as select * from product_rank_result_temp where product_price < 100");
+
+
+hc.sql("create table problem 6.top_products as select distinct p.* from products p inner join order_items oi on oi.order_item_product_id = p.product_id inner join orders o on o.order_id = oi.order_item_order_id inner join top_cust tc on o.order_customer_id = tc.customer_id where p.product_price < 100");

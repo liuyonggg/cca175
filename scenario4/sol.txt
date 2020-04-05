@@ -1,0 +1,81 @@
+Problem Scenario 4
+PLEASE READ THE INTRODUCTION TO THIS SERIES. CLICK ON HOME LINK AND READ THE INTRO BEFORE ATTEMPTING TO SOLVE THE PROBLEMS
+
+Video walk-through of the solution to this problem can be found here [Click here]
+
+Click here for the video version of this series. This takes you to the youtube playlist of videos. 
+
+In this problem, we will focus on conversion between different file formats using spark or hive. This is a very import examination topic. I recommend that you master the data file conversion techniques and understand the limitations. You should have an alternate method of accomplishing a solution to the problem in case your primary method fails for any unknown reason. For example, if saving the result as a text file with snappy compression fails while using spark then you should be able to accomplish the same thing using Hive. In this blog\video I am going to walk you through some scenarios that cover alternative ways of dealing with same problem.    
+
+Problem 4:
+Import orders table from mysql as text file to the destination /user/cloudera/problem5/text. Fields should be terminated by a tab character ("\t") character and lines should be terminated by new line character ("\n"). 
+Import orders table from mysql  into hdfs to the destination /user/cloudera/problem5/avro. File should be stored as avro file.
+Import orders table from mysql  into hdfs  to folders /user/cloudera/problem5/parquet. File should be stored as parquet file.
+Transform/Convert data-files at /user/cloudera/problem5/avro and store the converted file at the following locations and file formats
+save the data to hdfs using snappy compression as parquet file at /user/cloudera/problem5/parquet-snappy-compress
+save the data to hdfs using gzip compression as text file at /user/cloudera/problem5/text-gzip-compress
+save the data to hdfs using no compression as sequence file at /user/cloudera/problem5/sequence
+save the data to hdfs using snappy compression as text file at /user/cloudera/problem5/text-snappy-compress
+Transform/Convert data-files at /user/cloudera/problem5/parquet-snappy-compress and store the converted file at the following locations and file formats
+save the data to hdfs using no compression as parquet file at /user/cloudera/problem5/parquet-no-compress
+save the data to hdfs using snappy compression as avro file at /user/cloudera/problem5/avro-snappy
+Transform/Convert data-files at /user/cloudera/problem5/avro-snappy and store the converted file at the following locations and file formats
+save the data to hdfs using no compression as json file at /user/cloudera/problem5/json-no-compress
+save the data to hdfs using gzip compression as json file at /user/cloudera/problem5/json-gzip
+Transform/Convert data-files at  /user/cloudera/problem5/json-gzip and store the converted file at the following locations and file formats
+save the data to as comma separated text using gzip compression at   /user/cloudera/problem5/csv-gzip
+Using spark access data at /user/cloudera/problem5/sequence and stored it back to hdfs using no compression as ORC file to HDFS to destination /user/cloudera/problem5/orc 
+Solution: 
+Try your best to solve the above scenario without going through the solution below. If you could then use the solution to compare your result. If you could not then I strongly recommend that you go through the concepts again (this time in more depth). Each step below provides a solution to the points mentioned in the Problem Scenario. 
+
+Step 1: 
+sqoop import --connect "jdbc:mysql://quickstart.cloudera:3306/retail_db" --password cloudera --username retail_dba --table orders --as-textfile --fields-terminated-by '\t' --target-dir /user/cloudera/problem5/text -m 1
+
+Step 2: 
+sqoop import --connect "jdbc:mysql://quickstart.cloudera:3306/retail_db" --password cloudera --username retail_dba --table orders --as-avrodatafile--target-dir /user/cloudera/problem5/avro -m 1
+
+Step 3: 
+sqoop import --connect "jdbc:mysql://quickstart.cloudera:3306/retail_db" --password cloudera --username retail_dba --table orders --as-parquetfile --target-dir /user/cloudera/problem5/parquet -m 1
+Step 4: 
+var dataFile = sqlContext.read.avro("/user/cloudera/problem5/avro");
+sqlContext.setConf("spark.sql.parquet.compression.codec","snappy");
+dataFile.repartition(1).write.parquet("/user/cloudera/problem5/parquet-snappy-compress");
+dataFile.map(x=> x(0)+"\t"+x(1)+"\t"+x(2)+"\t"+x(3)).saveAsTextFile("/user/cloudera/problem5/text-gzip-compress",classOf[org.apache.hadoop.io.compress.GzipCodec]);
+dataFile.map(x=> (x(0).toString,x(0)+"\t"+x(1)+"\t"+x(2)+"\t"+x(3))).saveAsSequenceFile("/user/cloudera/problem5/sequence");
+
+Below may fail in some cloudera VMS. If the spark command fails use the sqoop command to accomplish the problem. Remember you need to get out to spark shell to run the sqoop command. 
+
+dataFile.map(x=> x(0)+"\t"+x(1)+"\t"+x(2)+"\t"+x(3)).saveAsTextFile("/user/cloudera/problem5/text-snappy-compress",classOf[org.apache.hadoop.io.compress.SnappyCodec]);
+
+sqoop import --table orders --connect "jdbc:mysql://quickstart.cloudera:3306/retail_db" --username retail_dba --password cloudera --as-textfile -m1 --target-dir user/cloudera/problem5/text-snappy-compress --compress --compression-codec org.apache.hadoop.io.compress.SnappyCodec
+
+Step 5: 
+var parquetDataFile = sqlContext.read.parquet("/user/cloudera/problem5/parquet-snappy-compress")
+sqlContext.setConf("spark.sql.parquet.compression.codec","uncompressed");
+parquetDataFile.write.parquet("/user/cloudera/problem5/parquet-no-compress");
+sqlContext.setConf("spark.sql.avro.compression.codec","snappy");
+
+parquetDataFile.write.avro("/user/cloudera/problem5/avro-snappy");
+Step 6: 
+var avroData = sqlContext.read.avro("/user/cloudera/problem5/avro-snappy");
+avroData.toJSON.saveAsTextFile("/user/cloudera/problem5/json-no-compress");
+avroData.toJSON.saveAsTextFile("/user/cloudera/problem5/json-gzip",classOf[org.apache.hadoop.io.GzipCodec]);
+
+Step 7 : 
+var jsonData = sqlContext.read.json("/user/cloudera/problem5/json-gzip");
+jsonData.map(x=>x(0)+","+x(1)+","+x(2)+","+x(3)).saveAsTextFile("/user/cloudera/problem5/csv-gzip",classOf[org.apache.hadoop.io.compress.GzipCodec])
+Step 8: 
+//To read the sequence file you need to understand the sequence getter for the key and value class to //be used while loading the sequence file as a spark RDD.
+//In a new terminal Get the Sequence file to local file system
+hadoop fs -get /user/cloudera/problem5/sequence/part-00000
+//read the first 300 characters to understand the two classes to be used. 
+cut -c-300 part-00000
+
+//In spark shell do below
+var seqData = sc.sequenceFile("/user/cloudera/problem5/sequence/",classOf[org.apache.hadoop.io.Text],classOf[org.apache.hadoop.io.Text]);
+seqData.map(x=>{var d = x._2.toString.split("\t"); (d(0),d(1),d(2),d(3))}).toDF().write.orc("/user/cloudera/problem5/orc");
+
+Contribution from Raphael L. Nascimento:
+
+You can use below method as well for setting the compression codec.
+sqlContext.sql("SET spark.sql.parquet.compression.codec=snappy")
